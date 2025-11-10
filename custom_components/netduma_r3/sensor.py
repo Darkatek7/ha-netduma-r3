@@ -11,25 +11,14 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .coordinator import NetdumaDataCoordinator
 from .const import DOMAIN
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    coordinator = NetdumaDataCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
-
-    entities: list[SensorEntity] = []
-
-    # Router‑level sensors
-    entities.append(RouterUptimeSensor(coordinator))
-    entities.append(RouterFirmwareSensor(coordinator))
-
-    # Per‑device traffic sensors
+async def async_setup_entry(hass, entry, async_add_entities):
+    coordinator = hass.data[DOMAIN][entry.entry_id]  # ← reuse
+    entities = []
     for devid, meta in coordinator.data.get("devices", {}).items():
         name = meta.get("name", devid)
-        entities.append(DeviceBytesSensor(coordinator, devid, name, "rx"))
-        entities.append(DeviceBytesSensor(coordinator, devid, name, "tx"))
-        entities.append(DeviceRateSensor(coordinator, devid, name, "rx"))
-        entities.append(DeviceRateSensor(coordinator, devid, name, "tx"))
-
+        entities.append(NetdumaTracker(coordinator, devid, name))
     async_add_entities(entities)
+device_tracker
 
 class BaseNetdumaSensor(CoordinatorEntity[NetdumaDataCoordinator], SensorEntity):
     _attr_has_entity_name = True
