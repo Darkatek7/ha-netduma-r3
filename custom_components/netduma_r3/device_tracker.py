@@ -7,14 +7,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import NetdumaDataCoordinator
+from .const import DOMAIN
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
-) -> None:
-    coordinator = NetdumaDataCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
-
-    entities: list[TrackerEntity] = []
+async def async_setup_entry(hass, entry, async_add_entities):
+    coordinator = hass.data[DOMAIN][entry.entry_id]  # ← reuse
+    entities = []
     for devid, meta in coordinator.data.get("devices", {}).items():
         name = meta.get("name", devid)
         entities.append(NetdumaTracker(coordinator, devid, name))
