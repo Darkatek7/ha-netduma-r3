@@ -23,8 +23,8 @@ class DumaOSClient:
         username: str | None = None,
         password: str | None = None,
     ) -> None:
-        # Many R3 firmwares use a self‑signed cert on HTTPS
-        self._base = f"https://{host}"
+        self._host = host                      # ← missing
+        self._base = f"https://{host}"         # default; may switch to http later
         self._session = session
         self._verify_ssl = verify_ssl
         self._username = username
@@ -33,7 +33,9 @@ class DumaOSClient:
         self._headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
     def _schemes(self) -> list[str]:
-        return ["https", "http"]
+    if not getattr(self, "_host", None):
+        raise RuntimeError("Client not initialized: missing host")
+    return ["https", "http"]
 
     async def _seed_and_csrf(self, base: str) -> dict[str, str]:
         try:
