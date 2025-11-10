@@ -22,6 +22,7 @@ async def async_setup_entry(
 
 class NetdumaTracker(CoordinatorEntity[NetdumaDataCoordinator], TrackerEntity):
     _attr_has_entity_name = True
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: NetdumaDataCoordinator, devid: str, name: str) -> None:
         super().__init__(coordinator)
@@ -36,3 +37,8 @@ class NetdumaTracker(CoordinatorEntity[NetdumaDataCoordinator], TrackerEntity):
     @property
     def source_type(self) -> SourceType:
         return SourceType.ROUTER
+
+    @property
+    def device_info(self):
+        host = self.coordinator.entry.data["host"]
+        return {"identifiers": {("netduma_r3", host)}}
