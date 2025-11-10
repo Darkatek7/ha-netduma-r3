@@ -1,1 +1,0 @@
-# ha-netduma-r3
