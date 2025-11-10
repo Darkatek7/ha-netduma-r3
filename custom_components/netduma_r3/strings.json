@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Netduma R3",
+        "description": "Enter connection settings",
+        "data": {
+          "host": "Host",
+          "verify_ssl": "Verify SSL",
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    }
+  }
+}
