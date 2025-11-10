@@ -14,28 +14,22 @@ class DumaOSClient:
       https://<host>/apps/<app-id>/rpc/
     """
 
-    def __init__(
-        self,
-        host: str,
-        session: aiohttp.ClientSession,
-        *,
-        verify_ssl: bool = False,
-        username: str | None = None,
-        password: str | None = None,
-    ) -> None:
-        self._host = host                      # ← missing
-        self._base = f"https://{host}"         # default; may switch to http later
+    def __init__(self, host: str, session: aiohttp.ClientSession, *, verify_ssl: bool=False,
+                 username: str | None=None, password: str | None=None) -> None:
+        self._host = host
+        self._base = f"https://{host}"
         self._session = session
         self._verify_ssl = verify_ssl
         self._username = username
         self._password = password
         self._id = 0
         self._headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        log.debug("DumaOSClient init host=%s", host)  # confirm in logs
 
     def _schemes(self) -> list[str]:
-    if not getattr(self, "_host", None):
-        raise RuntimeError("Client not initialized: missing host")
-    return ["https", "http"]
+        # keep this fully indented under the method
+        return ["https", "http"]
+
 
     async def _seed_and_csrf(self, base: str) -> dict[str, str]:
         try:
