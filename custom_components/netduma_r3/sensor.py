@@ -14,11 +14,17 @@ from .const import DOMAIN
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]  # ← reuse
     entities = []
+    entities.append(RouterUptimeSensor(coordinator))
+    entities.append(RouterFirmwareSensor(coordinator))
     for devid, meta in coordinator.data.get("devices", {}).items():
         name = meta.get("name", devid)
-        entities.append(NetdumaTracker(coordinator, devid, name))
+        entities += [
+            DeviceBytesSensor(coordinator, devid, name, "rx"),
+            DeviceBytesSensor(coordinator, devid, name, "tx"),
+            DeviceRateSensor(coordinator, devid, name, "rx"),
+            DeviceRateSensor(coordinator, devid, name, "tx"),
+        ]
     async_add_entities(entities)
-device_tracker
 
 class BaseNetdumaSensor(CoordinatorEntity[NetdumaDataCoordinator], SensorEntity):
     _attr_has_entity_name = True
