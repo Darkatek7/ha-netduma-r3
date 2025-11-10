@@ -7,7 +7,8 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
+from datetime import timedelta
+from homeassistant.helpers.event import async_track_time_interval
 from .client import DumaOSClient
 from .const import DEFAULT_SCAN_INTERVAL, DEFAULT_TREE_INTERVAL, DEFAULT_SYS_INTERVAL
 
@@ -40,18 +41,10 @@ class NetdumaDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._schedule_tasks()
 
     def _schedule_tasks(self) -> None:
-        self.hass.helpers.event.async_track_time_interval(
-            self._refresh_presence,
-            self.hass.helpers.event.dt.timedelta(seconds=DEFAULT_SCAN_INTERVAL),
-        )
-        self.hass.helpers.event.async_track_time_interval(
-            self._refresh_trees,
-            self.hass.helpers.event.dt.timedelta(seconds=DEFAULT_TREE_INTERVAL),
-        )
-        self.hass.helpers.event.async_track_time_interval(
-            self._refresh_system,
-            self.hass.helpers.event.dt.timedelta(seconds=DEFAULT_SYS_INTERVAL),
-        )
+        async_track_time_interval(self.hass, self._refresh_presence, timedelta(seconds=DEFAULT_SCAN_INTERVAL))
+        async_track_time_interval(self.hass, self._refresh_trees, timedelta(seconds=DEFAULT_TREE_INTERVAL))
+        async_track_time_interval(self.hass, self._refresh_system, timedelta(seconds=DEFAULT_SYS_INTERVAL))
+
 
     async def _refresh_full(self, *_):
         devices = await self.client.get_all_devices()
