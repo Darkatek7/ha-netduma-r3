@@ -4,6 +4,7 @@ import time
 from collections import defaultdict
 from typing import Any
 import logging
+from .const import DOMAIN
 from datetime import timedelta
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -30,9 +31,9 @@ class NetdumaDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         super().__init__(
             hass,
-            logger=hass.logger,
-            name="netduma_r3",
-            update_interval=None,  # manual scheduling per‑task
+            logger=logging.getLogger(__name__),  # ← fix
+            name=DOMAIN,                         # optional tidy
+            update_interval=None,
         )
         # internal state
         self._last_bytes: dict[str, dict[str, int]] = defaultdict(lambda: {"rx": 0, "tx": 0})
