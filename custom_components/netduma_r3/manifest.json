@@ -1,0 +1,10 @@
+{
+  "domain": "netduma_r3",
+  "name": "Netduma R3",
+  "version": "0.1.0",
+  "documentation": "https://github.com/Darkatek7/ha-netduma-r3",
+  "requirements": [],
+  "codeowners": ["@Darkatek7"],
+  "config_flow": true,
+  "iot_class": "local_polling"
+}
