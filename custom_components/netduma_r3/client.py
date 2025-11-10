@@ -1,10 +1,10 @@
 from __future__ import annotations
-
-from __future__ import annotations
 import json
 from typing import Any
 import aiohttp
+import logging
 
+log = logging.getLogger(__name__)
 JSON = dict[str, Any]
 
 class DumaOSClient:
@@ -32,72 +32,126 @@ class DumaOSClient:
         self._id = 0
         self._headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
+    def _schemes(self) -> list[str]:
+        return ["https", "http"]
+
+    async def _seed_and_csrf(self, base: str) -> dict[str, str]:
+        try:
+            async with self._session.get(
+                f"{base}/",
+                ssl=(self._verify_ssl if base.startswith("https") else None),
+                allow_redirects=True,
+            ):
+                pass
+        except aiohttp.ClientError as e:
+            log.debug("Seed GET failed on %s: %s", base, e)
+            return {}
+        xsrf = None
+        for c in self._session.cookie_jar:
+            if c.key.lower() in ("xsrf-token", "csrftoken", "csrf_token"):
+                xsrf = c.value
+                break
+        return {"X-XSRF-TOKEN": xsrf} if xsrf else {}
+
     async def _ensure_session(self) -> None:
         if not (self._username and self._password):
             return
 
-        # 0) Probe Basic on a cheap RPC first; if accepted, we’re done
-        probe_url = f"{self._base}/apps/com.netdumasoftware.systeminfo/rpc/"
-        probe_payload = {"jsonrpc":"2.0","id":0,"clienttype":"web","method":"get_system_info","params":[]}
-        async with self._session.post(
-            probe_url, data=json.dumps(probe_payload), headers=self._headers,
-            ssl=self._verify_ssl, auth=aiohttp.BasicAuth(self._username, self._password)
-        ) as resp:
-            if resp.status != 401:
-                return
+        last_url = None
+        last_status = None
 
-        # 1) Seed cookies and CSRF by visiting root
-        async with self._session.get(f"{self._base}/", ssl=self._verify_ssl, allow_redirects=True) as _:
-            pass
-        # Extract common CSRF cookie names if present
-        jar = self._session.cookie_jar
-        def _get_cookie(name: str) -> str | None:
-            for c in jar:
-                if c.key.lower() == name.lower():
-                    return c.value
-            return None
-        xsrf = _get_cookie("XSRF-TOKEN") or _get_cookie("csrftoken") or _get_cookie("csrf_token")
-        csrf_headers = {"X-XSRF-TOKEN": xsrf} if xsrf else {}
+        # Probe RPC with Basic on both schemes
+        probe_payload = {"jsonrpc": "2.0", "id": 0, "clienttype": "web", "method": "get_system_info", "params": []}
+        for scheme in self._schemes():
+            base = f"{scheme}://{self._host}"
+            url = f"{base}/apps/com.netdumasoftware.systeminfo/rpc/"
+            try:
+                async with self._session.post(
+                    url,
+                    data=json.dumps(probe_payload),
+                    headers=self._headers,
+                    ssl=(self._verify_ssl if scheme == "https" else None),
+                    auth=aiohttp.BasicAuth(self._username, self._password),
+                    allow_redirects=True,
+                ) as resp:
+                    last_url, last_status = url, resp.status
+                    log.debug("Probe %s -> %s", url, resp.status)
+                    if resp.status != 401:
+                        self._base = base
+                        return
+            except aiohttp.ClientError as e:
+                log.debug("Probe error on %s: %s", url, e)
 
-        # 2) Try form-encoded login on common endpoints
-        form = aiohttp.FormData()
-        form.add_field("username", self._username)
-        form.add_field("password", self._password)
-        for ep in ("/login", "/duma/login"):
-            async with self._session.post(
-                f"{self._base}{ep}", data=form, headers=csrf_headers,
-                ssl=self._verify_ssl, allow_redirects=True
-            ) as lr:
-                if lr.status in (200, 204):  # cookies set
-                    return
+        # Cookie session on both schemes
+        for scheme in self._schemes():
+            base = f"{scheme}://{self._host}"
+            csrf_headers = await self._seed_and_csrf(base)
+            common_headers = {"Origin": base, "Referer": f"{base}/"}
 
-        # 3) Try JSON login on API endpoints some builds use
-        json_body = {"username": self._username, "password": self._password}
-        for ep in ("/dumaos/api/login", "/api/login"):
-            async with self._session.post(
-                f"{self._base}{ep}", json=json_body, headers=csrf_headers,
-                ssl=self._verify_ssl, allow_redirects=True
-            ) as lr:
-                if lr.status in (200, 204):
-                    return
+            # Form endpoints
+            form = aiohttp.FormData()
+            form.add_field("username", self._username)
+            form.add_field("password", self._password)
+            for ep in ("/login", "/duma/login"):
+                url = f"{base}{ep}"
+                try:
+                    async with self._session.post(
+                        url,
+                        data=form,
+                        headers={**csrf_headers, **common_headers},
+                        ssl=(self._verify_ssl if scheme == "https" else None),
+                        allow_redirects=True,
+                    ) as lr:
+                        last_url, last_status = url, lr.status
+                        log.debug("Form login %s -> %s", url, lr.status)
+                        if lr.status in (200, 204):
+                            self._base = base
+                            return
+                except aiohttp.ClientError as e:
+                    log.debug("Form login error on %s: %s", url, e)
 
-        # 4) No auth path worked
-        raise aiohttp.ClientResponseError(request_info=None, history=(), status=401)
+            # JSON endpoints
+            js = {"username": self._username, "password": self._password, "remember": True}
+            for ep in ("/dumaos/api/login", "/api/login"):
+                url = f"{base}{ep}"
+                try:
+                    async with self._session.post(
+                        url,
+                        json=js,
+                        headers={**csrf_headers, **common_headers},
+                        ssl=(self._verify_ssl if scheme == "https" else None),
+                        allow_redirects=True,
+                    ) as lr:
+                        last_url, last_status = url, lr.status
+                        log.debug("JSON login %s -> %s", url, lr.status)
+                        if lr.status in (200, 204):
+                            self._base = base
+                            return
+                except aiohttp.ClientError as e:
+                    log.debug("JSON login error on %s: %s", url, e)
+
+        # Make the failure readable in HA logs
+        raise RuntimeError(f"Netduma auth failed. Last endpoint {last_url} returned {last_status}")
 
     async def _rpc(self, app: str, method: str, params: list[Any] | None = None) -> Any:
         self._id += 1
         await self._ensure_session()
         url = f"{self._base}/apps/{app}/rpc/"
-        payload = {"jsonrpc":"2.0","id":self._id,"clienttype":"web","method":method,"params":params or []}
+        payload = {"jsonrpc": "2.0", "id": self._id, "clienttype": "web", "method": method, "params": params or []}
         auth = aiohttp.BasicAuth(self._username, self._password) if (self._username and self._password) else None
 
         for attempt in (0, 1):
             async with self._session.post(
-                url, data=json.dumps(payload), headers=self._headers, ssl=self._verify_ssl,
-                auth=(auth if attempt == 0 else None), allow_redirects=True
+                url,
+                data=json.dumps(payload),
+                headers=self._headers,
+                ssl=(self._verify_ssl if self._base.startswith("https") else None),
+                auth=(auth if attempt == 0 else None),
+                allow_redirects=True,
             ) as resp:
                 if resp.status == 401 and attempt == 0:
-                    continue  # retry with cookies only
+                    log.debug("RPC 401 on %s with Basic. Retrying with cookies only.", url)
+                    continue
                 resp.raise_for_status()
                 data = await resp.json(content_type=None)
             if "error" in data:
