@@ -33,9 +33,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 class BaseNetdumaSensor(CoordinatorEntity[NetdumaDataCoordinator], SensorEntity):
     _attr_has_entity_name = True
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, coordinator: NetdumaDataCoordinator) -> None:
         super().__init__(coordinator)
+
+    @property
+    def device_info(self):
+        host = self.coordinator.entry.data["host"]
+        sys = self.coordinator.data.get("system", {}) or {}
+        return {
+            "identifiers": {("netduma_r3", host)},
+            "manufacturer": "Netduma",
+            "model": sys.get("board", "R3"),
+            "name": f"Netduma R3 ({host})",
+            "sw_version": sys.get("version"),
+        }
 
 class RouterUptimeSensor(BaseNetdumaSensor):
     def __init__(self, coordinator: NetdumaDataCoordinator) -> None:
